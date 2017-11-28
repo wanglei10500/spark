@@ -23,6 +23,7 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.SparkSession
 // $example off:typed_custom_aggregation$
 
+//类型安全的用户定义的聚合函数
 object UserDefinedTypedAggregation {
 
   // $example on:typed_custom_aggregation$
@@ -31,25 +32,30 @@ object UserDefinedTypedAggregation {
 
   object MyAverage extends Aggregator[Employee, Average, Double] {
     // A zero value for this aggregation. Should satisfy the property that any b + zero = b
+    //聚合一个零值 应该满足b+zero=b
     def zero: Average = Average(0L, 0L)
-    // Combine two values to produce a new value. For performance, the function may modify `buffer`
-    // and return it instead of constructing a new object
+    // Combine two values to produce a new value. For performance, the function may modify `buffer`  and return it instead of constructing a new object
+    // 结合两个值来产生一个新值 针对性能、功能修改“buffer”代替构造一个新对象并返回它
     def reduce(buffer: Average, employee: Employee): Average = {
       buffer.sum += employee.salary
       buffer.count += 1
       buffer
     }
     // Merge two intermediate values
+    // 合并两个中间值
     def merge(b1: Average, b2: Average): Average = {
       b1.sum += b2.sum
       b1.count += b2.count
       b1
     }
     // Transform the output of the reduction
+    // 转换的输出
     def finish(reduction: Average): Double = reduction.sum.toDouble / reduction.count
     // Specifies the Encoder for the intermediate value type
+    // 指定中间值类型的编码器
     def bufferEncoder: Encoder[Average] = Encoders.product
     // Specifies the Encoder for the final output value type
+    // 指定最终的输出值类型的编码器
     def outputEncoder: Encoder[Double] = Encoders.scalaDouble
   }
   // $example off:typed_custom_aggregation$

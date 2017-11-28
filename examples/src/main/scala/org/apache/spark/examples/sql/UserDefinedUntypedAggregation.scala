@@ -17,11 +17,9 @@
 package org.apache.spark.examples.sql
 
 // $example on:untyped_custom_aggregation$
-import org.apache.spark.sql.expressions.MutableAggregationBuffer
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
 // $example off:untyped_custom_aggregation$
 
 object UserDefinedUntypedAggregation {
@@ -29,38 +27,54 @@ object UserDefinedUntypedAggregation {
   // $example on:untyped_custom_aggregation$
   object MyAverage extends UserDefinedAggregateFunction {
     // Data types of input arguments of this aggregate function
+    // 数据类型的输入参数的聚合函数
     def inputSchema: StructType = StructType(StructField("inputColumn", LongType) :: Nil)
+
     // Data types of values in the aggregation buffer
+    // 数据类型的值的聚合缓冲区
     def bufferSchema: StructType = {
       StructType(StructField("sum", LongType) :: StructField("count", LongType) :: Nil)
     }
+
     // The data type of the returned value
+    // 返回值的数据类型
     def dataType: DataType = DoubleType
+
     // Whether this function always returns the same output on the identical input
+    // 在相同的输入 这个函数是否始终返回相同的输出
     def deterministic: Boolean = true
+
     // Initializes the given aggregation buffer. The buffer itself is a `Row` that in addition to
     // standard methods like retrieving a value at an index (e.g., get(), getBoolean()), provides
     // the opportunity to update its values. Note that arrays and maps inside the buffer are still
     // immutable.
+    //初始化聚合缓冲区 缓冲区本身就是一个“Row” 除了标准方法  例如检索索引值(e.g., get(), getBoolean()) 提供更新值的机会 数组和maps内部buffer仍然不可变
     def initialize(buffer: MutableAggregationBuffer): Unit = {
       buffer(0) = 0L
       buffer(1) = 0L
     }
+
     // Updates the given aggregation buffer `buffer` with new input data from `input`
+    // 更新给定的聚合与新的输入数据从缓冲区“buffer”“input”
     def update(buffer: MutableAggregationBuffer, input: Row): Unit = {
       if (!input.isNullAt(0)) {
         buffer(0) = buffer.getLong(0) + input.getLong(0)
         buffer(1) = buffer.getLong(1) + 1
       }
     }
+
     // Merges two aggregation buffers and stores the updated buffer values back to `buffer1`
+    // 合并两个聚合缓冲区和储存更新后的缓冲区的值回“buffer1”
     def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
       buffer1(0) = buffer1.getLong(0) + buffer2.getLong(0)
       buffer1(1) = buffer1.getLong(1) + buffer2.getLong(1)
     }
+
     // Calculates the final result
+    // 计算出最终结果
     def evaluate(buffer: Row): Double = buffer.getLong(0).toDouble / buffer.getLong(1)
   }
+
   // $example off:untyped_custom_aggregation$
 
   def main(args: Array[String]): Unit = {

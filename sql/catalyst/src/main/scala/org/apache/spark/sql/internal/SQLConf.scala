@@ -140,6 +140,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val COLUMN_VECTOR_OFFHEAP_ENABLED =
+    buildConf("spark.sql.columnVector.offheap.enabled")
+      .internal()
+      .doc("When true, use OffHeapColumnVector in ColumnarBatch.")
+      .booleanConf
+      .createWithDefault(false)
+
   val PREFER_SORTMERGEJOIN = buildConf("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
@@ -591,12 +598,6 @@ object SQLConf {
       " fail to compile generated code")
     .booleanConf
     .createWithDefault(true)
-
-  val MAX_CASES_BRANCHES = buildConf("spark.sql.codegen.maxCaseBranches")
-    .internal()
-    .doc("The maximum number of switches supported with codegen.")
-    .intConf
-    .createWithDefault(20)
 
   val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
     .internal()
@@ -1133,8 +1134,6 @@ class SQLConf extends Serializable with Logging {
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
-  def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
-
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
@@ -1209,6 +1208,8 @@ class SQLConf extends Serializable with Logging {
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+
+  def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 

@@ -237,6 +237,9 @@ object SQLDataSourceExample {
   }
 
   private def runJdbcDatasetExample(spark: SparkSession): Unit = {
+    /**
+      * JDBC 连接其它数据库
+      */
     // $example on:jdbc_dataset$
     // Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
     // Loading data from a JDBC source

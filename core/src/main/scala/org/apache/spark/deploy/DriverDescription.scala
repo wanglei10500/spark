@@ -17,6 +17,14 @@
 
 package org.apache.spark.deploy
 
+/**
+  * Driver的消息描述
+  * @param jarUrl
+  * @param mem
+  * @param cores
+  * @param supervise
+  * @param command
+  */
 private[deploy] case class DriverDescription(
     jarUrl: String,
     mem: Int,

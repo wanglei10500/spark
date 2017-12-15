@@ -93,6 +93,7 @@ private class ClientEndpoint(
           driverArgs.cores,
           driverArgs.supervise,
           command)
+        // ClientEndpoint的onStart发送消息给Master RequestSubmitDriver 注册Driver
         ayncSendToMasterAndForwardReply[SubmitDriverResponse](
           RequestSubmitDriver(driverDescription))
 
@@ -225,12 +226,13 @@ object Client {
       conf.set("spark.rpc.askTimeout", "10s")
     }
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
-
+    //创建rpcEnv
     val rpcEnv =
       RpcEnv.create("driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
-
+    //获得和Master通信的RpcEndPointRef
     val masterEndpoints = driverArgs.masters.map(RpcAddress.fromSparkURL).
       map(rpcEnv.setupEndpointRef(_, Master.ENDPOINT_NAME))
+    //注册ClientEndpoint ,其生命周期为onStart使用方法onStart使用masterEndPoints,发送RequestSubmitDriver消息给Master 注册Driver
     rpcEnv.setupEndpoint("client", new ClientEndpoint(rpcEnv, driverArgs, masterEndpoints, conf))
 
     rpcEnv.awaitTermination()

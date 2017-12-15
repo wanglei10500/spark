@@ -20,8 +20,8 @@ package org.apache.spark.deploy
 import scala.collection.Map
 
 private[spark] case class Command(
-    mainClass: String,
-    arguments: Seq[String],
+    mainClass: String, //DriverWrapper
+    arguments: Seq[String], //用户编写的main方法在arguments中
     environment: Map[String, String],
     classPathEntries: Seq[String],
     libraryPathEntries: Seq[String],

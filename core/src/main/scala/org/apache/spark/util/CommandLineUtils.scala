@@ -22,9 +22,10 @@ import java.io.PrintStream
 import org.apache.spark.SparkException
 
 /**
- * Contains basic command line parsing functionality and methods to parse some common Spark CLI
- * options.
- */
+  * Contains basic command line parsing functionality and methods to parse some common Spark CLI
+  * options.
+  * 包含基本的命令行解析功能和解析一些常用的方法
+  */
 private[spark] trait CommandLineUtils {
 
   // Exposed for testing

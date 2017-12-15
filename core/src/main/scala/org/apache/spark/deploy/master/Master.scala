@@ -410,6 +410,9 @@ private[deploy] class Master(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    /**
+      * 提交任务时 注册ClientEndpoint Client.scala 236行
+      */
     case RequestSubmitDriver(description) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
@@ -417,8 +420,11 @@ private[deploy] class Master(
         context.reply(SubmitDriverResponse(self, false, None, msg))
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
+        //整理Driver信息
         val driver = createDriver(description)
+        //持久化Driver信息,用于master recovery时恢复Driver
         persistenceEngine.addDriver(driver)
+        //注册Driver
         waitingDrivers += driver
         drivers.add(driver)
         schedule()

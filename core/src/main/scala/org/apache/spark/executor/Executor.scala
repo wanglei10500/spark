@@ -58,11 +58,15 @@ private[spark] class Executor(
     isLocal: Boolean = false,
     uncaughtExceptionHandler: UncaughtExceptionHandler = SparkUncaughtExceptionHandler)
   extends Logging {
-
+  /**
+    * Executor重要属性 runningTasks和threadPool 分别用于维护正在运行的TaskRunner 和调度TaskRunner线程
+    * 将收到的taskRunner及执行TaskRunner发生在Executor的launchTask方法中
+    */
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
+  // task依赖的jar和file,远程下载到work节点
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
@@ -169,7 +173,7 @@ private[spark] class Executor(
   startDriverHeartbeater()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
-
+  //收到Driver发送的task信息 将其封装为taskRunner
   def launchTask(context: ExecutorBackend, taskDescription: TaskDescription): Unit = {
     val tr = new TaskRunner(context, taskDescription)
     runningTasks.put(taskDescription.taskId, tr)
@@ -228,6 +232,12 @@ private[spark] class Executor(
     ManagementFactory.getGarbageCollectorMXBeans.asScala.map(_.getCollectionTime).sum
   }
 
+  /**
+    * 运行期Executor收到Driver发送的task信息 将其封装为taskRunner
+    * TaskRunner继承Runnable Executor使用线程池调度TaskRunnable
+    * @param execBackend
+    * @param taskDescription
+    */
   class TaskRunner(
       execBackend: ExecutorBackend,
       private val taskDescription: TaskDescription)

@@ -109,7 +109,11 @@ import org.apache.spark.util._
  *
  *  - When adding a new data structure, update `DAGSchedulerSuite.assertDataStructuresEmpty` to
  *    include the new structure. This will help to catch memory leaks.
+  *
+  *    DAGScheduler中 根据rdd的Dependency生成stage
+  *    stage分为ShuffleMapTask ResultStage两种类型  根据Stage类型生成对应的task 分别是ShuffleMapTask ResultTask 最终调用TaskScheduler提交任务
  */
+
 private[spark]
 class DAGScheduler(
     private[scheduler] val sc: SparkContext,
@@ -1052,6 +1056,7 @@ class DAGScheduler(
     if (tasks.size > 0) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      // 提交task
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())

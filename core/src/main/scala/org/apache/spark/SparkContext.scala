@@ -496,14 +496,15 @@ class SparkContext(config: SparkConf) extends Logging {
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
-
+    //根据资源管理器类型 创建对应的SchedulerBackend TaskScheduler
+    //Standalone模式下为SparkDeploySchedulerBackend
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
-
+    // 启动TaskScheduler SchedulerBackend 注册app
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
     _taskScheduler.start()
@@ -2026,6 +2027,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (conf.getBoolean("spark.logLineage", false)) {
       logInfo("RDD's recursive dependencies:\n" + rdd.toDebugString)
     }
+    // SparkContext.runJob方法调用DAGScheduler.runJob方法 生成task并提交
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, resultHandler, localProperties.get)
     progressBar.foreach(_.finishAll())
     rdd.doCheckpoint()
@@ -2117,6 +2119,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param processPartition a function to run on each partition of the RDD
    * @param resultHandler callback to pass each result to
    */
+  // SparkPi reduce方法调用SparkContext中runJob
   def runJob[T, U: ClassTag](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,

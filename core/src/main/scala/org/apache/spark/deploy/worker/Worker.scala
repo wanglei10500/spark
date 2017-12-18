@@ -464,7 +464,7 @@ private[deploy] class Worker(
     case ReconnectWorker(masterUrl) =>
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
       registerWithMaster()
-
+    // work收到开启 Executor消息
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
@@ -473,6 +473,7 @@ private[deploy] class Worker(
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
 
           // Create the executor's working directory
+          // 创建Executor运行目录
           val executorDir = new File(workDir, appId + "/" + execId)
           if (!executorDir.mkdirs()) {
             throw new IOException("Failed to create directory " + executorDir)
@@ -518,6 +519,8 @@ private[deploy] class Worker(
             conf,
             appLocalDirs, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
+
+          // 执行ExecutorRunner的start方法
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
@@ -551,8 +554,12 @@ private[deploy] class Worker(
         }
       }
 
+    /**
+      * 从Master发送消息 启动Driver
+      */
     case LaunchDriver(driverId, driverDesc) =>
       logInfo(s"Asked to launch driver $driverId")
+      //将Driver的信息封装为DriverRunner
       val driver = new DriverRunner(
         conf,
         driverId,
@@ -563,6 +570,7 @@ private[deploy] class Worker(
         workerUri,
         securityMgr)
       drivers(driverId) = driver
+      //启动Driver
       driver.start()
 
       coresUsed += driverDesc.cores

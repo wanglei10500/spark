@@ -142,6 +142,7 @@ private[deploy] class ExecutorRunner(
   private def fetchAndRunExecutor() {
     try {
       // Launch the process
+      // 拼接Linux命令
       val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
@@ -163,15 +164,16 @@ private[deploy] class ExecutorRunner(
         }
       builder.environment.put("SPARK_LOG_URL_STDERR", s"${baseUrl}stderr")
       builder.environment.put("SPARK_LOG_URL_STDOUT", s"${baseUrl}stdout")
-
+      // 使用ProcessBuilder执行Linux命令，启动CoarseGrainedExecutorBackend
       process = builder.start()
       val header = "Spark Executor Command: %s\n%s\n\n".format(
         formattedCommand, "=" * 40)
 
       // Redirect its stdout and stderr to files
+      // 设置日志输出目录为executorDir/stdout
       val stdout = new File(executorDir, "stdout")
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
-
+      // 设置错误日志输出目录为executorDir/stderr
       val stderr = new File(executorDir, "stderr")
       Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)

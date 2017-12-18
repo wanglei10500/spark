@@ -169,15 +169,21 @@ private[deploy] class DriverRunner(
   }
 
   private[worker] def prepareAndRunDriver(): Int = {
+    //下载Driver Jar 到Worker本地 即示例中/path/to/examples.jar
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
-
+    //替换参数中的workerUrl和localJarFilename
     def substituteVariables(argument: String): String = argument match {
       case "{{WORKER_URL}}" => workerUrl
       case "{{USER_JAR}}" => localJarFilename
       case other => other
     }
 
+    /**
+      * 将Driver中的参数组织为Linux命令
+      * 通过Java执行组织好的命令 使用java.lang.ProcessBuilder运行
+      * 这一步就是启动Driver，即执行/path/to/examples.jar中的main方法
+      */
     // TODO: If we add ability to submit multiple jars they should also be added here
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command, securityManager,
       driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)

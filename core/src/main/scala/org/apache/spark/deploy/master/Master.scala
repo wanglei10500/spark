@@ -427,6 +427,7 @@ private[deploy] class Master(
         //注册Driver
         waitingDrivers += driver
         drivers.add(driver)
+        //launch Driver & launch Executor
         schedule()
 
         // TODO: It might be good to instead have the submission client poll the master to determine
@@ -664,16 +665,22 @@ private[deploy] class Master(
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
+    // waitingApps,  注册app信息 主要是core 和 memory
+    // scheduler waitingApps 顺序为FIFO
     for (app <- waitingApps if app.coresLeft > 0) {
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
       // Filter out workers that don't have enough resources to launch an executor
+      //过滤worker 过滤后的worker 其剩余core和memory至少可以启动一个Executor
       val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
           worker.coresFree >= coresPerExecutor.getOrElse(1))
         .sortBy(_.coresFree).reverse
+      // spark executor 资源调度
+      // assignedCores 为每个Worker分配的core数
       val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
       // Now that we've decided how many cores to allocate on each worker, let's allocate them
+      // 根据分配好的assignedCores 在相应的Worker节点启动Executor
       for (pos <- 0 until usableWorkers.length if assignedCores(pos) > 0) {
         allocateWorkerResourceToExecutors(
           app, assignedCores(pos), coresPerExecutor, usableWorkers(pos))
@@ -696,10 +703,14 @@ private[deploy] class Master(
     // If the number of cores per executor is specified, we divide the cores assigned
     // to this worker evenly among the executors with no remainder.
     // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
+
+    // 计算Executor总数 总数=分配的core数/一个Executor所需的core数
+    // 如果Executor所需的core数没有指定 则总core数分配给一个Executor
     val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
     val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
     for (i <- 1 to numExecutors) {
       val exec = app.addExecutor(worker, coresToAssign)
+      // 启动Executor
       launchExecutor(worker, exec)
       app.state = ApplicationState.RUNNING
     }
@@ -713,10 +724,18 @@ private[deploy] class Master(
     if (state != RecoveryState.ALIVE) {
       return
     }
+    //打乱Worker顺序 避免Driver集中
+    //遍历Worker 如果Worker节点剩余内存和core足够，启动Driver
     // Drivers take strict precedence over executors
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
     val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
+
+    /**
+      * deploy-mode-cluster模式中，注册的Driver信息在waitingDrivers中
+      * 即使是client模式中，不注册Driver的情况下，依然会scheduler waitingDrivers
+      * 执行可能因资源或Master recovery 等问题处于waiting状态的Driver
+      */
     for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
       // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
       // start from the last worker that was assigned a driver, and continue onwards until we have
@@ -727,6 +746,7 @@ private[deploy] class Master(
         val worker = shuffledAliveWorkers(curPos)
         numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+          //启动Driver
           launchDriver(worker, driver)
           waitingDrivers -= driver
           launched = true
@@ -734,14 +754,17 @@ private[deploy] class Master(
         curPos = (curPos + 1) % numWorkersAlive
       }
     }
+    //启动Executor
     startExecutorsOnWorkers()
   }
 
   private def launchExecutor(worker: WorkerInfo, exec: ExecutorDesc): Unit = {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
+    // 给Worker发送LaunchExecutor消息
     worker.endpoint.send(LaunchExecutor(masterUrl,
       exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
+    // 给Driver发送Executor信息 用于Driver4040端口显示
     exec.application.driver.send(
       ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
@@ -827,6 +850,7 @@ private[deploy] class Master(
     }
 
     applicationMetricsSystem.registerSource(app.appSource)
+    // 注册app
     apps += app
     idToApp(app.id) = app
     endpointToApp(app.driver) = app
@@ -1000,6 +1024,8 @@ private[deploy] class Master(
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
     driver.worker = Some(worker)
+    // 调用RpcEndPointRef ,发送LaunchDriver消息给Worker节点
+    // 此Worker是scheduler()方法随机选出的
     worker.endpoint.send(LaunchDriver(driver.id, driver.desc))
     driver.state = DriverState.RUNNING
   }

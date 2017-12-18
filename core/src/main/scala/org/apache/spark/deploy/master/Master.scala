@@ -130,24 +130,26 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
+    // 启动基于jetty的webUI
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     if (reverseProxy) {
       masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
     }
+    // 启动定时器定时发送信息检查worker状态 默认60s 发消息给Master的CheckForWorkerTimeOut 无返回值
     checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = Utils.tryLogNonFatalError {
         self.send(CheckForWorkerTimeOut)
       }
     }, 0, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-
+  // 如果配置spark.master.rest.enabled=true，启动rest Server。
     if (restServerEnabled) {
       val port = conf.getInt("spark.master.rest.port", 6066)
       restServer = Some(new StandaloneRestServer(address.host, port, conf, self, masterUrl))
     }
     restServerBoundPort = restServer.map(_.start())
-
+    // 启动度量系统，persistenceEngine，leaderElectionAgent分别是关于master recovery和leader选举。
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
     applicationMetricsSystem.start()
@@ -179,7 +181,7 @@ private[deploy] class Master(
     persistenceEngine = persistenceEngine_
     leaderElectionAgent = leaderElectionAgent_
   }
-
+  // 关闭webUI等各种服务
   override def onStop() {
     masterMetricsSystem.report()
     applicationMetricsSystem.report()
@@ -206,8 +208,9 @@ private[deploy] class Master(
   override def revokedLeadership() {
     self.send(RevokedLeadership)
   }
-
+//receive方法接收EndpointRef send方法发送的信息
   override def receive: PartialFunction[Any, Unit] = {
+    //leader选举 recovery和各种状态查询
     case ElectedLeader =>
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
@@ -230,18 +233,21 @@ private[deploy] class Master(
     case RevokedLeadership =>
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
-
+    // 注册Worker信息到Master
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
+      // 判断Master的状态是不是standby以及WorkerId是否已存在。
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
         workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
       } else {
+        // 注册worker信息
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           workerRef, workerWebUiUrl)
+        // 调用registerWorker注册worker信息
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress))
@@ -254,7 +260,7 @@ private[deploy] class Master(
             + workerAddress))
         }
       }
-
+    // 注册 application
     case RegisterApplication(description, driver) =>
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
@@ -322,8 +328,9 @@ private[deploy] class Master(
         case _ =>
           throw new Exception(s"Received unexpected state update for driver $driverId: $state")
       }
-
+    // 心跳机制
     case Heartbeat(workerId, worker) =>
+      // 处理Worker发过来的信息，如果worker信息已经存在则更新lastHeartbeat(在onStart方法中提到)，否则重新连接master，也就是注册
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
@@ -399,16 +406,19 @@ private[deploy] class Master(
         case None =>
           logWarning("Worker state from unknown worker: " + workerId)
       }
-
+     // 移除application
     case UnregisterApplication(applicationId) =>
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
 
+    /**
+      * 定时器检查Worker状态 来自Master的onStart方法
+      */
     case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
 
   }
-
+// 接收EndpointRef ask及其衍生方法发送的信息
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     /**
       * 提交任务时 注册ClientEndpoint Client.scala 236行
@@ -772,12 +782,13 @@ private[deploy] class Master(
   private def registerWorker(worker: WorkerInfo): Boolean = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
+    // 移除DEAD Worker
     workers.filter { w =>
       (w.host == worker.host && w.port == worker.port) && (w.state == WorkerState.DEAD)
     }.foreach { w =>
       workers -= w
     }
-
+    // 移除UNKNOWN Worker
     val workerAddress = worker.endpoint.address
     if (addressToWorker.contains(workerAddress)) {
       val oldWorker = addressToWorker(workerAddress)
@@ -790,7 +801,7 @@ private[deploy] class Master(
         return false
       }
     }
-
+    // 注册Worker 所谓的注册就是将worker信息添加到workers、idToWorker、addressToWorker三个集合容器中
     workers += worker
     idToWorker(worker.id) = worker
     addressToWorker(workerAddress) = worker
@@ -994,6 +1005,8 @@ private[deploy] class Master(
   private def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
+    // Master根据条件 lastHeartbeat < currentTime - WORKER_TIMEOUT_MS 判断Worker是否还在发送心跳，如果过期将其从对应的集合删除
+    // lastHeartbeat是Worker最后一次连接的时间
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT_MS).toArray
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {
@@ -1072,6 +1085,8 @@ private[deploy] object Master extends Logging {
    *   (2) The web UI bound port
    *   (3) The REST server bound port, if any
    */
+  // 启动Master返回元组 包含RpcEnv WebUI端口 Rest Server端口
+  // 初始化RpcEnv，注册Master(RpcEndpoint)到RpcEnv 生命周期onStart -> receive(receiveAndReply)* -> onStop方法开始工作
   def startRpcEnvAndEndpoint(
       host: String,
       port: Int,

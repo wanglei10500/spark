@@ -295,11 +295,12 @@ private[spark] class Executor(
       // is followed by cancel(interrupt=True). Thus we use notifyAll() to avoid a lost wakeup:
       notifyAll()
     }
-
+    //运行task
     override def run(): Unit = {
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
+      // taskMemoryManager用于管理每个Task的内存
       val taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId)
       val deserializeStartTime = System.currentTimeMillis()
       val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
@@ -308,16 +309,20 @@ private[spark] class Executor(
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
+      // 给Driver发送消息 通知task状态为RUNNING
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
       var taskStartCpu: Long = 0
+      // 计算GC时间
       startGCTime = computeTotalGcTime()
 
       try {
         // Must be set before updateDependencies() is called, in case fetching dependencies
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
-
+        // 反序列化收到的task信息，结果为file和jar路径 以及Task对应的ByteBuffer
+        // 从Driver下载相应的file和jar 并使用replClassLoader类加载器加载jar
+        // 反序列化task对应的ByteBuffer,得到Task对象
         updateDependencies(taskDescription.addedFiles, taskDescription.addedJars)
         task = ser.deserialize[Task[Any]](
           taskDescription.serializedTask, Thread.currentThread.getContextClassLoader)
@@ -344,6 +349,8 @@ private[spark] class Executor(
           threadMXBean.getCurrentThreadCpuTime
         } else 0L
         var threwException = true
+        // 调用Task的run方法，执行任务
+        // Task是抽象类，其实现类有两个，ShuffleMapTask和ResultTask，分别对应shuffle和非shuffle任务。
         val value = try {
           val res = task.run(
             taskAttemptId = taskId,
@@ -354,7 +361,7 @@ private[spark] class Executor(
         } finally {
           val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
-
+          // 检查内存泄漏
           if (freedMemory > 0 && !threwException) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
             if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false)) {
@@ -417,6 +424,7 @@ private[spark] class Executor(
         val resultSize = serializedDirectResult.limit
 
         // directSend = sending directly back to the driver
+        // 判断结果的大小 采取不同方式处理，丢弃，使用BlockManager或者直接返回
         val serializedResult: ByteBuffer = {
           if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
@@ -439,6 +447,7 @@ private[spark] class Executor(
         }
 
         setTaskFinishedAndClearInterruptStatus()
+        // 发送Result给Driver 最后调用CoarseGrainedExecutorBackend的statusUpdate方法返回result给Driver
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
       } catch {

@@ -73,10 +73,10 @@ private[spark] class ShuffleMapTask(
   @transient private val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
   }
-
   override def runTask(context: TaskContext): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
     val threadMXBean = ManagementFactory.getThreadMXBean
+    // 反序列化taskBinary,得到rdd和func
     val deserializeStartTime = System.currentTimeMillis()
     val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime
@@ -88,6 +88,7 @@ private[spark] class ShuffleMapTask(
     _executorDeserializeCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime - deserializeStartCpuTime
     } else 0L
+    // ShuffleMapTask相比ResultTask多了一个步骤，使用ShuffleWriter将结果写到本地
 
     var writer: ShuffleWriter[Any, Any] = null
     try {

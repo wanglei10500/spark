@@ -1057,6 +1057,9 @@ class DAGScheduler(
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       // 提交task
+      /**
+        * TaskScheduler中使用TaskSetManager管理TaskSet submitTasks方法最终调用CoarseGrainedSchedulerBackend的launchTasks方法将task发送到Executor
+        */
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())

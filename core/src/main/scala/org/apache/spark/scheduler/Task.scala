@@ -105,6 +105,7 @@ private[spark] abstract class Task[T](
       Option(attemptNumber)).setCurrentContext()
 
     try {
+      // Task的run方法调用其runTask方法执行task
       runTask(context)
     } catch {
       case e: Throwable =>

@@ -27,6 +27,7 @@ import org.apache.spark.util.{IntParam, Utils}
  * Command-line parser for the master.
  */
 private[master] class MasterArguments(args: Array[String], conf: SparkConf) extends Logging {
+  // 接收参数，包括rpc的host、port(底层netty使用)和webUI server的port
   var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080

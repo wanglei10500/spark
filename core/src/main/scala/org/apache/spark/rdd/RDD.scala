@@ -368,6 +368,7 @@ abstract class RDD[T: ClassTag](
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
+    // (context, pid, iter) => iter.map(cleanF) 是ResultTask.scala runTask 中的func
     new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
   }
 

@@ -41,7 +41,9 @@ import org.apache.spark.util.Utils
  *
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
- *
+ *  Spark程序的配置信息
+ *  加载所有以spark开头的环境变量 通过new SparkConf(false) 避免加载
+ *  不支持运行期修改配置信息
  * @param loadDefaults whether to also load values from Java system properties
  *
  * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
@@ -63,7 +65,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     })
     _reader
   }
-
+  // 加载所有以spark开头的环境变量
   if (loadDefaults) {
     loadFromSystemProperties(false)
   }

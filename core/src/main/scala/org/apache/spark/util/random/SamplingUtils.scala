@@ -37,6 +37,7 @@ private[spark] object SamplingUtils {
     : (Array[T], Long) = {
     val reservoir = new Array[T](k)
     // Put the first k elements in the reservoir.
+    // 把前k个元素放入数组reservoir中 k为设置的每个分区的样本数 sampleSizePerPartition
     var i = 0
     while (i < k && input.hasNext) {
       val item = input.next()
@@ -45,6 +46,8 @@ private[spark] object SamplingUtils {
     }
 
     // If we have consumed all the elements, return them. Otherwise do the replacement.
+    // 如果分区记录数少于设置的分区样本数 直接返回
+    // 否则使用iterator获取一条记录同时生成一个随机数 如果随机数小于k则把reservoir数组对应记录替换
     if (i < k) {
       // If input size < k, trim the array to return only an array of input size.
       val trimReservoir = new Array[T](i)

@@ -32,9 +32,12 @@ import org.apache.spark.util.random.SamplingUtils
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
  * Maps each key to a partition ID, from 0 to `numPartitions - 1`.
+  * 用于k-v类型的RDD key分区的策略
  */
 abstract class Partitioner extends Serializable {
+  // 返回分区数
   def numPartitions: Int
+  // 输入key 返回partitionId PartitionId取值0到numPartitions-1
   def getPartition(key: Any): Int
 }
 
@@ -98,6 +101,16 @@ class HashPartitioner(partitions: Int) extends Partitioner {
 }
 
 /**
+  * 选取出边界分隔符 RangePartitioner
+  * 根据分隔符确定key属于哪个分区
+  * 分区内(key)无序 分区间有序
+  * sortBy、sortByKey，使用RangePartitioner实现
+  *
+  *
+  * 使用reservoir Sample抽样方法，对每个Partition进行抽样
+    计算权重， 对数据多(大于sampleSizePerPartition)的分区再进行抽样
+    由权重信息计算分区分隔符rangeBounds
+    由rangeBounds计算分区数和key属于哪个分区
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
  *
@@ -117,28 +130,36 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
+  // rangeBounds 分区分割符
+  // 其核心算法是一种抽样算法，reservoir sampling
   private var rangeBounds: Array[K] = {
     if (partitions <= 1) {
       Array.empty
     } else {
       // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
+      // 使用reservoir Sample抽样方法 对每个Partition抽样
       val sampleSize = math.min(20.0 * partitions, 1e6)
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
+      //sketch 据rdd的id获得抽样的seed
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
       if (numItems == 0L) {
         Array.empty
       } else {
         // If a partition contains much more than the average number of items, we re-sample from it
         // to ensure that enough items are collected from that partition.
+
         val fraction = math.min(sampleSize / math.max(numItems, 1L), 1.0)
         val candidates = ArrayBuffer.empty[(K, Float)]
         val imbalancedPartitions = mutable.Set.empty[Int]
+        // 单个分区记录数*fraction 大于sampleSizePerPartition的，使用imbalancedPartitions存储
+        // 后续再进行抽样 确保数据多的分区抽取足够多的样本
         sketched.foreach { case (idx, n, sample) =>
           if (fraction * n > sampleSizePerPartition) {
             imbalancedPartitions += idx
           } else {
             // The weight is 1 over the sampling probability.
+            // 计算权重 为分区内记录总数除以样本数
             val weight = (n.toDouble / sample.length).toFloat
             for (key <- sample) {
               candidates += ((key, weight))
@@ -147,12 +168,14 @@ class RangePartitioner[K : Ordering : ClassTag, V](
         }
         if (imbalancedPartitions.nonEmpty) {
           // Re-sample imbalanced partitions with the desired sampling probability.
+          // imbalancedPartitions存储的分区 再进行抽样同时调整权重
           val imbalanced = new PartitionPruningRDD(rdd.map(_._1), imbalancedPartitions.contains)
           val seed = byteswap32(-rdd.id - 1)
           val reSampled = imbalanced.sample(withReplacement = false, fraction, seed).collect()
           val weight = (1.0 / fraction).toFloat
           candidates ++= reSampled.map(x => (x, weight))
         }
+        // 根据(key,weight)数据 选取边界
         RangePartitioner.determineBounds(candidates, partitions)
       }
     }
@@ -248,7 +271,7 @@ private[spark] object RangePartitioner {
 
   /**
    * Sketches the input RDD via reservoir sampling on each partition.
-   *
+   * 根据rdd的id获得抽样的seed(用于reservoir sampling中产生随机数)
    * @param rdd the input RDD to sketch
    * @param sampleSizePerPartition max sample size per partition
    * @return (total number of items, an array of (partitionId, number of items, sample))
@@ -260,6 +283,7 @@ private[spark] object RangePartitioner {
     // val classTagK = classTag[K] // to avoid serializing the entire partitioner object
     val sketched = rdd.mapPartitionsWithIndex { (idx, iter) =>
       val seed = byteswap32(idx ^ (shift << 16))
+      // (reservoir sampling算法)
       val (sample, n) = SamplingUtils.reservoirSampleAndCount(
         iter, sampleSizePerPartition, seed)
       Iterator((idx, n, sample))
@@ -271,7 +295,7 @@ private[spark] object RangePartitioner {
   /**
    * Determines the bounds for range partitioning from candidates with weights indicating how many
    * items each represents. Usually this is 1 over the probability used to sample this candidate.
-   *
+   * 根据(key,weight)数据 选取边界 计算分区分隔符
    * @param candidates unordered candidates with weights
    * @param partitions number of partitions
    * @return selected bounds

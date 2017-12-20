@@ -234,6 +234,9 @@ private[deploy] class Master(
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
     // 注册Worker信息到Master
+    /**
+      * Worker.scala sendRegisterMessageToMaster()
+      */
     case RegisterWorker(
       id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl, masterAddress) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(

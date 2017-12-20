@@ -84,13 +84,19 @@ private[netty] case class RpcOutboxMessage(
 
 }
 
+/**
+  *
+  * Outbox作用于client端，当RpcEndpointRef请求RpcEndpoint时，
+  * 若RpcEndpointRef和RpcEndpoint位于同一机器时，走的是Inbox的逻辑
+  * 否则，即RpcEndpointRef和RpcEndpoint不在一台机器，则RpcEndpointRef将信息发送到Outbox。
+  */
 private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
 
   outbox => // Give this an alias so we can use it more clearly in closures.
-
+  // messages用于存储消息
   @GuardedBy("this")
   private val messages = new java.util.LinkedList[OutboxMessage]
-
+  // 用于和相应的netty server通信
   @GuardedBy("this")
   private var client: TransportClient = null
 
@@ -113,6 +119,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
   /**
    * Send a message. If there is no active connection, cache it and launch a new connection. If
    * [[Outbox]] is stopped, the sender will be notified with a [[SparkException]].
+    * 用于将消息添加到messages 调用drainOutbox方法消费消息
    */
   def send(message: OutboxMessage): Unit = {
     val dropped = synchronized {
@@ -136,6 +143,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
    * connection.
    */
   private def drainOutbox(): Unit = {
+    // 消息类型为OutboxMessage
     var message: OutboxMessage = null
     synchronized {
       if (stopped) {

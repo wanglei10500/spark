@@ -64,6 +64,7 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
   }
 
   /** Starts the external shuffle service if the user has configured us to. */
+  // 如果配置spark.shuffle.service.enabled=true，启动独立的shuffle service
   def startIfEnabled() {
     if (enabled) {
       start()

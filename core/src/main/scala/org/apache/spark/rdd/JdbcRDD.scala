@@ -67,6 +67,8 @@ class JdbcRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
+    // upperBound相当于JdbcRDDSuite 85行中的100 lowerBound对应1  numPartitions 对应3
+    // 将1到100分为3份(partition数量)，结果为(1,33)、(34,66)、(67,100)，封装为JdbcPartition并返回
     val length = BigInt(1) + upperBound - lowerBound
     (0 until numPartitions).map { i =>
       val start = lowerBound + ((i * length) / numPartitions)
@@ -78,6 +80,7 @@ class JdbcRDD[T: ClassTag](
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
   {
     context.addTaskCompletionListener{ context => closeIfNeeded() }
+    // 将Partition强转为JdbcPartition，获取连接并预处理sql
     val part = thePart.asInstanceOf[JdbcPartition]
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)

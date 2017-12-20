@@ -30,6 +30,7 @@ import org.apache.spark.shuffle.ShuffleHandle
  */
 @DeveloperApi
 abstract class Dependency[T] extends Serializable {
+  // 父Rdd的包装
   def rdd: RDD[T]
 }
 
@@ -45,6 +46,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
    * Get the parent partitions for a child partition.
    * @param partitionId a partition of the child RDD
    * @return the partitions of the parent RDD that the child partition depends upon
+    * 根据子RDD的PartitionId返回对应的父RDD的PartitionId
    */
   def getParents(partitionId: Int): Seq[Int]
 
@@ -53,18 +55,20 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 
 
 /**
+  * 宽依赖
+  * 代表shuffle阶段的输出
  * :: DeveloperApi ::
  * Represents a dependency on the output of a shuffle stage. Note that in the case of shuffle,
  * the RDD is transient since we don't need it on the executor side.
  *
- * @param _rdd the parent RDD
- * @param partitioner partitioner used to partition the shuffle output
+ * @param _rdd the parent RDD 父RDD
+ * @param partitioner partitioner used to partition the shuffle output 用于partition shuffle结果
  * @param serializer [[org.apache.spark.serializer.Serializer Serializer]] to use. If not set
  *                   explicitly then the default serializer, as specified by `spark.serializer`
- *                   config option, will be used.
- * @param keyOrdering key ordering for RDD's shuffles
- * @param aggregator map/reduce-side aggregator for RDD's shuffle
- * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
+ *                   config option, will be used. 通过 spark.serializer设置 默认[[org.apache.spark.serializer.Serializer Serializer]]
+  * @param keyOrdering key ordering for RDD's shuffles shuffle结果key如何排序
+ * @param aggregator map/reduce-side aggregator for RDD's shuffle map/reduce端的聚合
+ * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine) 是否map端聚合
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -97,6 +101,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 /**
  * :: DeveloperApi ::
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.
+  * 表示子RDD和父RDD的Partition之间的关系是1对1的，即子RDD的PartitionId和父RDD的PartitionId一样，如map和filter方法所示的关系
  */
 @DeveloperApi
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
@@ -105,18 +110,28 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 
 
 /**
+  * 窄依赖的一个实现
+  * 子RDD的Partition和父RDD的Partition在某个范围内(range) 1对1的关系
+  * 例如range为5 子RDD partition开始为3 父RDD partition开始为8 ，则
+  * 子RDD partition index3 4 5 6 7
+  * 父RDD partition index8 9 10 11 12
+  * 求子RDD partition为5的父RDD partition index为
+  * 5-3+8=10 对应getParents中的代码
+  * partitionId-outStart+inStart
  * :: DeveloperApi ::
  * Represents a one-to-one dependency between ranges of partitions in the parent and child RDDs.
- * @param rdd the parent RDD
- * @param inStart the start of the range in the parent RDD
- * @param outStart the start of the range in the child RDD
- * @param length the length of the range
+ * @param rdd the parent RDD 父RDD
+ * @param inStart the start of the range in the parent RDD 父RDD partition range的开始
+ * @param outStart the start of the range in the child RDD 子RDD partition range的开始
+ * @param length the length of the range range的长度
  */
 @DeveloperApi
 class RangeDependency[T](rdd: RDD[T], inStart: Int, outStart: Int, length: Int)
   extends NarrowDependency[T](rdd) {
 
   override def getParents(partitionId: Int): List[Int] = {
+    // 检查输入的partitionId是否在range内
+    // 检查位置的对应关系 返回父RDD的partition
     if (partitionId >= outStart && partitionId < outStart + length) {
       List(partitionId - outStart + inStart)
     } else {

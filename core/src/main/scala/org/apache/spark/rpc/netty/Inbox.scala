@@ -61,6 +61,7 @@ private[netty] class Inbox(
 
   inbox =>  // Give this an alias so we can use it more clearly in closures.
 
+  // 内部了维护了链表messages，用于存储消息，同时维护该消息对应消费者Endpoint
   @GuardedBy("this")
   protected val messages = new java.util.LinkedList[InboxMessage]()
 
@@ -77,14 +78,17 @@ private[netty] class Inbox(
   private var numActiveThreads = 0
 
   // OnStart should be the first message to process
+  // 初始化Inbox时,添加OnStart消息
   inbox.synchronized {
     messages.add(OnStart)
   }
 
   /**
    * Process stored messages.
+    * 提供了post和process两个方法，分别用于添加消息到messages和消费消息，process方法在MessageLoop中被调用
    */
   def process(dispatcher: Dispatcher): Unit = {
+    // 消息类型为InboxMessage
     var message: InboxMessage = null
     inbox.synchronized {
       if (!enableConcurrent && numActiveThreads != 0) {

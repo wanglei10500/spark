@@ -46,7 +46,7 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownH
  */
 private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: InputSplit)
   extends Partition {
-
+// 相比Partition，HadoopPartition则多了InputSplit
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = 31 * (31 + rddId) + index
@@ -192,6 +192,7 @@ class HadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
+    // spark切分hdfs文件，调用的是Hadoop的API
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)

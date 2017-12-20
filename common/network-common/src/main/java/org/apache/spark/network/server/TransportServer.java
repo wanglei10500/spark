@@ -71,6 +71,7 @@ public class TransportServer implements Closeable {
     this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
 
     try {
+      // TransportServer构造器中调用init方法
       init(hostToBind, portToBind);
     } catch (RuntimeException e) {
       JavaUtils.closeQuietly(this);
@@ -84,7 +85,7 @@ public class TransportServer implements Closeable {
     }
     return port;
   }
-
+  // init方法中启动netty server
   private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());

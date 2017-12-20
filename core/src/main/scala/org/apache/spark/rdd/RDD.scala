@@ -111,6 +111,7 @@ abstract class RDD[T: ClassTag](
   /**
    * :: DeveloperApi ::
    * Implemented by subclasses to compute a given partition.
+    * 输入一个partition 对其代表的数据进行计算
    */
   @DeveloperApi
   def compute(split: Partition, context: TaskContext): Iterator[T]
@@ -121,12 +122,14 @@ abstract class RDD[T: ClassTag](
    *
    * The partitions in this array must satisfy the following property:
    *   `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
+    *   数据被split的逻辑
    */
   protected def getPartitions: Array[Partition]
 
   /**
    * Implemented by subclasses to return how this RDD depends on parent RDDs. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+    * 这个RDD的依赖 即其父RDD
    */
   protected def getDependencies: Seq[Dependency[_]] = deps
 

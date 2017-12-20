@@ -164,6 +164,7 @@ object SparkEnv extends Logging {
     assert(conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
+    // 获取host和port信息，调用create方法
     val bindAddress = conf.get(DRIVER_BIND_ADDRESS)
     val advertiseAddress = conf.get(DRIVER_HOST_ADDRESS)
     val port = conf.get("spark.driver.port").toInt
@@ -233,7 +234,7 @@ object SparkEnv extends Logging {
     if (isDriver) {
       assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
     }
-
+// 创建安全相关的SecurityManager，通过spark.authenticate配置
     val securityManager = new SecurityManager(conf, ioEncryptionKey)
     ioEncryptionKey.foreach { _ =>
       if (!securityManager.isEncryptionEnabled()) {
@@ -241,7 +242,7 @@ object SparkEnv extends Logging {
           "wire.")
       }
     }
-
+    // 创建RpcEnv
     val systemName = if (isDriver) driverSystemName else executorSystemName
     val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port, conf,
       securityManager, clientMode = !isDriver)
@@ -373,26 +374,27 @@ object SparkEnv extends Logging {
     val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
-
+    // SparkEnv初始化了哪些对象
     val envInstance = new SparkEnv(
       executorId,
-      rpcEnv,
-      serializer,
+      rpcEnv,  // rpc通信
+      serializer, //序列化
       closureSerializer,
       serializerManager,
-      mapOutputTracker,
-      shuffleManager,
-      broadcastManager,
-      blockManager,
-      securityManager,
-      metricsSystem,
-      memoryManager,
-      outputCommitCoordinator,
+      mapOutputTracker, // map任务输出跟踪
+      shuffleManager, // shuffle管理
+      broadcastManager,  // 广播管理
+      blockManager, // block管理器
+      securityManager, // 权限相关
+      metricsSystem, // 度量系统
+      memoryManager, // 内存管理
+      outputCommitCoordinator, //协调task输出
       conf)
 
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
+    // 添加临时目录 程序结束前删除
     if (isDriver) {
       val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)

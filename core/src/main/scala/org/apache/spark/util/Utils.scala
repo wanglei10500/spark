@@ -2211,7 +2211,7 @@ private[spark] object Utils extends Logging {
    */
   def startServiceOnPort[T](
       startPort: Int,
-      startService: Int => (T, Int),
+      startService: Int => (T, Int),      //startNettyRpcEnv方法
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
 
@@ -2228,6 +2228,7 @@ private[spark] object Utils extends Logging {
         userPort(startPort, offset)
       }
       try {
+        // 启动netty server
         val (service, port) = startService(tryPort)
         logInfo(s"Successfully started service$serviceString on port $port.")
         return (service, port)

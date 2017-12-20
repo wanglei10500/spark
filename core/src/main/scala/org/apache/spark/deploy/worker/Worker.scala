@@ -70,6 +70,7 @@ private[deploy] class Worker(
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
+  // Master每60s查看Worker连接情况，Worker端每15s发送一次心跳
   private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
@@ -197,11 +198,14 @@ private[deploy] class Worker(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
+    // 开启shuffle服务 如果配置spark.shuffle.service.enabled=true，启动独立的shuffle service
     shuffleService.startIfEnabled()
+    // 开启WebUi
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
     workerWebUiUrl = s"http://$publicAddress:${webUi.boundPort}"
+    // 注册Worker
     registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
@@ -238,7 +242,9 @@ private[deploy] class Worker(
         override def run(): Unit = {
           try {
             logInfo("Connecting to master " + masterAddress + "...")
+            // 返回和Master通信的EndpointRef，masterEndpoint，同时调用带参registerWithMaster方法
             val masterEndpoint = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
+            // 注册Worker
             sendRegisterMessageToMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -341,15 +347,20 @@ private[deploy] class Worker(
     registrationRetryTimer.foreach(_.cancel(true))
     registrationRetryTimer = None
   }
-
+  // 向Master注册
   private def registerWithMaster() {
     // onDisconnected may be triggered multiple times, so don't attempt registration
     // if there are outstanding registration attempts scheduled.
+    // 避免重复注册
     registrationRetryTimer match {
       case None =>
         registered = false
+        // 注册Worker
         registerMasterFutures = tryRegisterAllMasters()
         connectionAttemptCount = 0
+        // Worker消息注册完成后会将registered属性设置为true
+        // 此定时任务定时检查registered，如果为false 可能已断开连接则自动注册Worker
+        // 注册逻辑和 tryRegisterAllMasters相同
         registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
           new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
@@ -364,7 +375,7 @@ private[deploy] class Worker(
           " attempt scheduled already.")
     }
   }
-
+  // 注册Worker信息到Master
   private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
     masterEndpoint.send(RegisterWorker(
       workerId,
@@ -376,7 +387,7 @@ private[deploy] class Worker(
       workerWebUiUrl,
       masterEndpoint.address))
   }
-
+  // 处理来自Master RpcEndpointRef的返回信息
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
       case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
@@ -385,13 +396,16 @@ private[deploy] class Worker(
         } else {
           logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
         }
+        // 将registered属性设置为true，修改用于和Master通信的masterRef及masterWebUiUr
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
+        // 定时发送心跳
         forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
             self.send(SendHeartbeat)
           }
         }, 0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
+        // 清除Worker目录 如果设置spark.worker.cleanup.enabled=true，清除Worker的工作目录
         if (CLEANUP_ENABLED) {
           logInfo(
             s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
@@ -419,7 +433,11 @@ private[deploy] class Worker(
   }
 
   override def receive: PartialFunction[Any, Unit] = synchronized {
+    /**
+      * Master.scala RegisterWorker
+      */
     case msg: RegisterWorkerResponse =>
+      // 处理Master的返回信息 心跳
       handleRegisterResponse(msg)
 
     case SendHeartbeat =>
@@ -597,6 +615,7 @@ private[deploy] class Worker(
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    // 只处理Worker状态查询
     case RequestWorkerState =>
       context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
@@ -655,6 +674,7 @@ private[deploy] class Worker(
   }
 
   override def onStop() {
+    // 相比于Master，多了executors、drivers和shuffleService的关闭
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()

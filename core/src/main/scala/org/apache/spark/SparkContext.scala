@@ -61,6 +61,8 @@ import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
 
 /**
+  * SparkContext 一个SparkContext代表了一个application
+  * 可以用来创建RDDs accumulators and broadcast等
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
@@ -383,6 +385,7 @@ class SparkContext(config: SparkConf) extends Logging {
     logInfo(s"Submitted application: $appName")
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
+    // 如果是YARN cluster模式则必须设置spark.yarn.app.id
     if (master == "yarn" && deployMode == "cluster" && !_conf.contains("spark.yarn.app.id")) {
       throw new SparkException("Detected yarn cluster mode, but isn't running on a cluster. " +
         "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
@@ -402,7 +405,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _jars = Utils.getUserJars(_conf)
     _files = _conf.getOption("spark.files").map(_.split(",")).map(_.filter(_.nonEmpty))
       .toSeq.flatten
-
+    // eventLogDir是否记录运行时信息，由spark.eventLog.enabled和spark.eventLog.dir控制
     _eventLogDir =
       if (isEventLogEnabled) {
         val unresolvedDir = conf.get("spark.eventLog.dir", EventLoggingListener.DEFAULT_LOG_DIR)
@@ -411,7 +414,7 @@ class SparkContext(config: SparkConf) extends Logging {
       } else {
         None
       }
-
+    // 是否压缩该信息_eventLogCodec spark.externalBlockStore.folderName设置运行时本地存储的目录名
     _eventLogCodec = {
       val compress = _conf.getBoolean("spark.eventLog.compress", false)
       if (compress && isEventLogEnabled) {
@@ -420,15 +423,17 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     }
-
+    // 如果为yarn-client模式，设置SPARK_YARN_MODE=true
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
+    // 使用JobProgressListener跟踪运行时信息，用于UI展示
     _jobProgressListener = new JobProgressListener(_conf)
     listenerBus.addListener(jobProgressListener)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
+    //最后创建SparkEnv对象，创建SparkEnv的过程涉及到非常多spark-core中的核心类。
     _env = createSparkEnv(_conf, isLocal, listenerBus)
     SparkEnv.set(_env)
 
@@ -458,7 +463,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Bind the UI before starting the task scheduler to communicate
     // the bound port to the cluster manager properly
     _ui.foreach(_.bind())
-
+    // 读取hadoop配置，将jar和file的路径添加到rpcEnv的fileServer
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
 
     // Add each JAR given through the constructor
@@ -469,7 +474,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (files != null) {
       files.foreach(addFile)
     }
-
+    // 读取Executor相关变量，重要的参数为ExecutorMemory
     _executorMemory = _conf.getOption("spark.executor.memory")
       .orElse(Option(System.getenv("SPARK_EXECUTOR_MEMORY")))
       .orElse(Option(System.getenv("SPARK_MEM"))
@@ -479,6 +484,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Convert java options to env vars as a work around
     // since we can't set env vars directly in sbt.
+
     for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
       value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
       executorEnvs(envKey) = value
@@ -494,10 +500,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
+    // _heartbeatReceiver是默认基于netty实现的心跳机制
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
+
     //根据资源管理器类型 创建对应的SchedulerBackend TaskScheduler
     //Standalone模式下为SparkDeploySchedulerBackend
+    // 创建schedulerBackend用于提交任务
     // Create and start the scheduler
     val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
@@ -507,8 +516,9 @@ class SparkContext(config: SparkConf) extends Logging {
     // 启动TaskScheduler SchedulerBackend 注册app
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
+    // 创建taskScheduler和dagScheduler
     _taskScheduler.start()
-
+    // 获取applicationId，启动度量系统
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
@@ -523,7 +533,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _env.metricsSystem.start()
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
     _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
-
+    // 获取eventLogger
     _eventLogger =
       if (isEventLogEnabled) {
         val logger =
@@ -537,6 +547,8 @@ class SparkContext(config: SparkConf) extends Logging {
       }
 
     // Optionally scale number of executors dynamically based on workload. Exposed for testing.
+
+    // executorAllocationManager关于Executor动态资源分配，通过spark.dynamicAllocation.enabled设置
     val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
     _executorAllocationManager =
       if (dynamicAllocationEnabled) {
@@ -551,7 +563,7 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     _executorAllocationManager.foreach(_.start())
-
+// 创建contextcleaner用于清理过期的RDD, shuffle和broadcast
     _cleaner =
       if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
         Some(new ContextCleaner(this))
@@ -559,7 +571,7 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     _cleaner.foreach(_.start())
-
+    // 启动ListenerBus，并post环境信息和应用信息
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
@@ -576,6 +588,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // unfinished event logs around after the JVM exits cleanly. It doesn't help if the JVM
     // is killed, though.
     logDebug("Adding shutdown hook") // force eager creation of logger
+    // 最后添加确保context停止的hook 至此整个sparkcontext的初始化流程结束
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
       ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
       logInfo("Invoking stop() from shutdown hook")

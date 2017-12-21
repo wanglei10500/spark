@@ -40,6 +40,7 @@ private[netty] abstract class NettyRpcCallContext(override val senderAddress: Rp
 
 /**
  * If the sender and the receiver are in the same process, the reply can be sent back via `Promise`.
+ * 处理client和server在一台机器的情况
  */
 private[netty] class LocalNettyRpcCallContext(
     senderAddress: RpcAddress,
@@ -53,13 +54,14 @@ private[netty] class LocalNettyRpcCallContext(
 
 /**
  * A [[RpcCallContext]] that will call [[RpcResponseCallback]] to send the reply back.
+ * RemoteNettyRpcCallContext用于处理远程server的情况
  */
 private[netty] class RemoteNettyRpcCallContext(
     nettyEnv: NettyRpcEnv,
     callback: RpcResponseCallback,
     senderAddress: RpcAddress)
   extends NettyRpcCallContext(senderAddress) {
-
+// 调用RpcResponseCallback.onSuccess方法返回信息
   override protected def send(message: Any): Unit = {
     val reply = nettyEnv.serialize(message)
     callback.onSuccess(reply)

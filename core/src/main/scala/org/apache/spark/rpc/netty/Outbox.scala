@@ -172,6 +172,7 @@ private[netty] class Outbox(nettyEnv: NettyRpcEnv, val address: RpcAddress) {
       try {
         val _client = synchronized { client }
         if (_client != null) {
+          // 使用TransportClient发送数据
           message.sendWith(_client)
         } else {
           assert(stopped == true)

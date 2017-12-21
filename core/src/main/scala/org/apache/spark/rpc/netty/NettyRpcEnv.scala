@@ -117,6 +117,7 @@ private[netty] class NettyRpcEnv(
       }
     // 启动netty server
     server = transportContext.createServer(bindAddress, port, bootstraps)
+    // server端注册RpcEndpointVerifier,底层使用Dispatcher管理
     dispatcher.registerRpcEndpoint(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
@@ -133,12 +134,16 @@ private[netty] class NettyRpcEnv(
   def asyncSetupEndpointRefByURI(uri: String): Future[RpcEndpointRef] = {
     val addr = RpcEndpointAddress(uri)
     val endpointRef = new NettyRpcEndpointRef(conf, addr, this)
+    // 发送消息CheckExistence(endpointRef.name)
+    // 检查名称为endpointRef.name的RpcEndpoint是否存在
     val verifier = new NettyRpcEndpointRef(
       conf, RpcEndpointAddress(addr.rpcAddress, RpcEndpointVerifier.NAME), this)
     verifier.ask[Boolean](RpcEndpointVerifier.CheckExistence(endpointRef.name)).flatMap { find =>
       if (find) {
+        // server端返回true RpcEndpoint存在，返回endpointRef
         Future.successful(endpointRef)
       } else {
+        // 返回false 抛出异常
         Future.failed(new RpcEndpointNotFoundException(uri))
       }
     }(ThreadUtils.sameThread)
@@ -210,7 +215,7 @@ private[netty] class NettyRpcEnv(
         }
       }
     }
-
+    // 使用Promise.Future异步处理结果
     def onSuccess(reply: Any): Unit = reply match {
       case RpcFailure(e) => onFailure(e)
       case rpcReply =>

@@ -102,10 +102,12 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     if (request instanceof ChunkFetchRequest) {
       processFetchRequest((ChunkFetchRequest) request);
     } else if (request instanceof RpcRequest) {
+      // 处理RPC请求
       processRpcRequest((RpcRequest) request);
     } else if (request instanceof OneWayMessage) {
       processOneWayMessage((OneWayMessage) request);
     } else if (request instanceof StreamRequest) {
+      // 处理Stream请求
       processStreamRequest((StreamRequest) request);
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
@@ -157,6 +159,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       rpcHandler.receive(reverseClient, req.body().nioByteBuffer(), new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
+          // respond  方法調用channel.writeAndFlush将结果返回
           respond(new RpcResponse(req.requestId, new NioManagedBuffer(response)));
         }
 
@@ -189,6 +192,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
    */
   private void respond(Encodable result) {
     SocketAddress remoteAddress = channel.remoteAddress();
+    // 返回信息给client
     channel.writeAndFlush(result).addListener(future -> {
       if (future.isSuccess()) {
         logger.trace("Sent result {} to client {}", result, remoteAddress);

@@ -86,6 +86,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("send a message remotely") {
     @volatile var message: String = null
     // Set up a RpcEndpoint using env
+    // 此处省略了env对象的创建，创建env调用RpcEnv.create方法，同时底层会注册RpcEndpointVerifier到Dispatcher，名字为endpoint-verifier，服务client端请求
+    // server端注册对象RpcEndpoint，名字为send-remotely
     env.setupEndpoint("send-remotely", new RpcEndpoint {
       override val rpcEnv = env
 
@@ -93,11 +95,13 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         case msg: String => message = msg
       }
     })
-
+    // 创建client端RpcEnv对象
     val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
     // Use anotherEnv to find out the RpcEndpointRef
+    // 获取RpcEndpointRef对象，此对象用来和名称为send-remotely的RpcEndpoint通信
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "send-remotely")
     try {
+      // 进行通信
       rpcEndpointRef.send("hello")
       eventually(timeout(5 seconds), interval(10 millis)) {
         assert("hello" === message)

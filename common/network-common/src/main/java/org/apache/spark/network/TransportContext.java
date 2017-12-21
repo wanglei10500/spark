@@ -144,6 +144,7 @@ public class TransportContext {
       SocketChannel channel,
       RpcHandler channelRpcHandler) {
     try {
+      // 创建TransportChannelHandler用于处理请求
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       channel.pipeline()
         .addLast("encoder", ENCODER)
@@ -152,6 +153,7 @@ public class TransportContext {
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
+        // 添加TransportChannelHandler 到pipeline
         .addLast("handler", channelHandler);
       return channelHandler;
     } catch (RuntimeException e) {

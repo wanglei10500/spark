@@ -47,6 +47,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * on the channel for at least `requestTimeoutMs`. Note that this is duplex traffic; we will not
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
+// Netty处理RPC类型请求依赖TransportChannelHandler 在TransportServer初始化时添加到pipeline中
 public class TransportChannelHandler extends ChannelInboundHandlerAdapter {
   private static final Logger logger = LoggerFactory.getLogger(TransportChannelHandler.class);
 

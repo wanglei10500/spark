@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 /**
  * Callback for the result of a single RPC. This will be invoked once with either success or
  * failure.
+ * 在client端负责异步提取结果
  */
 public interface RpcResponseCallback {
   /**

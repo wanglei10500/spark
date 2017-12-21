@@ -165,13 +165,15 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   *
   * The file server can return URIs handled by common libraries (such as "http" or "hdfs"), or
   * it can return "spark" URIs which will be handled by `RpcEnv#fetchFile`.
+  * 启动文件服务器，基于jetty或netty 提供远程下载jar或file
+  * RpcEnvFileServer作用于driver程序，为executor提供jar和file的远程下载服务
   */
 private[spark] trait RpcEnvFileServer {
 
   /**
     * Adds a file to be served by this RpcEnv. This is used to serve files from the driver
     * to executors when they're stored on the driver's local file system.
-    *
+    *  添加file到文件服务器 用于executor下载
     * @param file Local file to serve.
     * @return A URI for the location of the file.
     */
@@ -180,7 +182,7 @@ private[spark] trait RpcEnvFileServer {
   /**
     * Adds a jar to be served by this RpcEnv. Similar to `addFile` but for jars added using
     * `SparkContext.addJar`.
-    *
+    *  添加jar到文件服务器，用于executor下载
     * @param file Local file to serve.
     * @return A URI for the location of the file.
     */

@@ -63,7 +63,7 @@ public class TransportClientFactory implements Closeable {
   private static class ClientPool {
     TransportClient[] clients;
     Object[] locks;
-
+// spark使用了client连接池实现netty多路复用
     ClientPool(int size) {
       clients = new TransportClient[size];
       locks = new Object[size];

@@ -127,6 +127,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   /** Posts a message sent by a remote endpoint. */
   def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
+    // 在Dispatcher中实例化RemoteNettyRpcCallContext
     val rpcCallContext =
       new RemoteNettyRpcCallContext(nettyEnv, callback, message.senderAddress)
     val rpcMessage = RpcMessage(message.senderAddress, message.content, rpcCallContext)

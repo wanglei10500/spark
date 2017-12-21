@@ -44,7 +44,8 @@ import org.apache.spark.util._
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
  *                              and sent to executor side.
- *
+ * Task是执行计算的单元，Executor调用Task对象的runTask方法完成计算
+  * Task有两个子类，并且和Stage的类型存在对应关系，即Stage会转为对应的Task
  * The parameters below are optional:
  * @param jobId id of the job this task belongs to
  * @param appId id of the app this task belongs to

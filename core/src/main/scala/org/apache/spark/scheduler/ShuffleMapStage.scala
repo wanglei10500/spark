@@ -94,8 +94,12 @@ private[spark] class ShuffleMapStage(
 
   /**
    * Returns true if the map stage is ready, i.e. all partitions have shuffle outputs.
-   * This should be the same as `outputLocs.contains(Nil)`.
+   * This should be the same as `outputLocs.contains(Nil)`
+    * ShuffleMapStage是否执行完毕
+    * 当全部partitions的shuffle outputs存在则表示执行完毕
+    * 该方法和outputLocs.contains(Nil)等价
    */
+  //每当执行完一个Task会对变量_numAvailableOutputs加1，直至所有Task执行完，_numAvailableOutputs等于分区数
   def isAvailable: Boolean = _numAvailableOutputs == numPartitions
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */

@@ -30,13 +30,15 @@ import org.apache.spark.internal.Logging
  *
  * Note: The event queue will grow indefinitely. So subclasses should make sure `onReceive` can
  * handle events in time to avoid the potential OOM.
+  * 异步处理借助于EventLoop实现，EventLoop内部维护了LinkedBlockingQueue，LinkedBlockingQueue是基于链表实现的双端阻塞队列
+  * LinkedBlockingDeque支持双端同时操作，在指定容量并且容量已满时，支持阻塞
  */
 private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
   private val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]()
 
   private val stopped = new AtomicBoolean(false)
-
+ //定义了线程eventThread，eventThread中循环消费eventQueue中存储的事件，消费方法为onReceive
   private val eventThread = new Thread(name) {
     setDaemon(true)
 

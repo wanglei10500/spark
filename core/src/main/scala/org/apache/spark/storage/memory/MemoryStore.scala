@@ -76,6 +76,7 @@ private[storage] trait BlockEvictionHandler {
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
  */
+// 主要作用为管理内存中的block，即管理storage这部分内存
 private[spark] class MemoryStore(
     conf: SparkConf,
     blockInfoManager: BlockInfoManager,

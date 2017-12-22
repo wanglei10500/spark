@@ -33,7 +33,9 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
  * In this context, execution memory refers to that used for computation in shuffles, joins,
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
  * internal data across the cluster. There exists one MemoryManager per JVM.
+  * 内存管理对应的接口为MemoryManager，但Executor使用TaskMemoryManager和MemoryStore间接调用MemoryManager管理内存
  */
+// 作用：管理CoarseGrainedExecutorBackend进程的内存(即Executor)，其将内存主要划分为storage、execution和other三部分。CoarseGrainedExecutorBackend上运行的Task共享这部分内存
 private[spark] abstract class MemoryManager(
     conf: SparkConf,
     numCores: Int,
@@ -42,6 +44,10 @@ private[spark] abstract class MemoryManager(
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
+  // Storage	用于cache block，保存broadcast数据，以及发送large task result
+  // Unroll	Unroll占用的是Storage的内存，Unroll是指 BlockManager收到iterator形式的数据，最终存放到内存的过程
+  // Execution	保存shuffles、 joins、sorts 、aggregations等操作的中间数据
+  // other	剩余的部分，用于class以及spark中的元数据等开销
   @GuardedBy("this")
   protected val onHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.ON_HEAP)
   @GuardedBy("this")
@@ -82,7 +88,8 @@ private[spark] abstract class MemoryManager(
     onHeapStorageMemoryPool.setMemoryStore(store)
     offHeapStorageMemoryPool.setMemoryStore(store)
   }
-
+ //  MemoryManager的方法主要功能是管理内存，acquire*和release*
+  // MemoryManager将内存分为了storage、execution、unroll三部分管理
   /**
    * Acquire N bytes of memory to cache the given block, evicting existing ones if necessary.
    *
@@ -193,6 +200,16 @@ private[spark] abstract class MemoryManager(
    * Tracks whether Tungsten memory will be allocated on the JVM heap or off-heap using
    * sun.misc.Unsafe.
    */
+    // Execution的内存有两种管理方式on-heap、off-heap
+  /**
+    * 名称	作用
+      on-heap	使用JVM管理对象
+      off-heap[tungsten memory相关优化]	手动管理，减小JVM对象空间及gc开销
+
+      off-heap使用sun.misc.Unsafe API直接向OS申请释放内存
+    */
+
+  // Tungsten是spark执行引擎有史以来最大的改动，以榨干性能为己任。具体是关于ON_HEAP和OFF_HEAP的
   final val tungstenMemoryMode: MemoryMode = {
     if (conf.getBoolean("spark.memory.offHeap.enabled", false)) {
       require(conf.getSizeAsBytes("spark.memory.offHeap.size", 0) > 0,

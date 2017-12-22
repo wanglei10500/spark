@@ -70,6 +70,7 @@ import org.apache.spark.util.Utils;
  * <p>
  * There have been proposals to completely remove this code path; see SPARK-6026 for details.
  */
+// map task输出会汇总为一个文件
 final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);

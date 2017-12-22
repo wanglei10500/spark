@@ -44,6 +44,14 @@ import org.apache.spark.storage.BlockId
  *                          it if necessary. Cached blocks can be evicted only if actual
  *                          storage memory usage exceeds this region.
  */
+// spark 1.6新加入的内存管理器，统一资源管理器，和StaticMemoryManager最大不同之处在于，storage、execution内存界限不是固定的，可以互相借用
+
+/**
+  *
+  * 静态资源管理器的storage、execution内存界限是固定的，那么不使用cache的情况下，storage这部分内存会存在利用不充分的问题
+  * 统一内存管理器打破storage、execution的界限，storage、execution可以互相从对方借用内存
+  */
+
 private[spark] class UnifiedMemoryManager private[memory] (
     conf: SparkConf,
     val maxHeapMemory: Long,
@@ -189,17 +197,26 @@ private[spark] class UnifiedMemoryManager private[memory] (
 
 object UnifiedMemoryManager {
 
+  /**
+    * MemoryManager在storage内存中细分了unroll，静态内存管理的实现划分了unroll这部分内存，并设置了比例。统一内存管理不再细分unroll，统一为storage。
+    */
+  //UnifiedMemoryManager会先预留出300M内存，剩下的记作MaxMemory，这部分内存划分为storage、execution、other
+
   // Set aside a fixed amount of memory for non-storage, non-execution purposes.
   // This serves a function similar to `spark.memory.fraction`, but guarantees that we reserve
   // sufficient memory for the system even for small heaps. E.g. if we have a 1GB JVM, then
   // the memory used for execution and storage will be (1024 - 300) * 0.6 = 434MB by default.
+
+  // 预留300M内存
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf)
     new UnifiedMemoryManager(
       conf,
+      // execution
       maxHeapMemory = maxMemory,
+      // storage
       onHeapStorageRegionSize =
         (maxMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong,
       numCores = numCores)
@@ -208,6 +225,7 @@ object UnifiedMemoryManager {
   /**
    * Return the total amount of memory shared between execution and storage, in bytes.
    */
+  // MaxMemory
   private def getMaxMemory(conf: SparkConf): Long = {
     val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val reservedMemory = conf.getLong("spark.testing.reservedMemory",

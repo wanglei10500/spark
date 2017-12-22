@@ -94,14 +94,17 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       // them at the end. This avoids doing serialization and deserialization twice to merge
       // together the spilled files, which would happen with the normal code path. The downside is
       // having multiple files open at a time and thus more memory allocated to buffers.
+      // 对应BypassMergeSortShuffleWriter
       new BypassMergeSortShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else if (SortShuffleManager.canUseSerializedShuffle(dependency)) {
       // Otherwise, try to buffer map outputs in a serialized form, since this is more efficient:
+      // 对应UnsafeShuffleWriter
       new SerializedShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else {
       // Otherwise, buffer map outputs in a deserialized form:
+      // 对应SortShuffleWrite
       new BaseShuffleHandle(shuffleId, numMaps, dependency)
     }
   }

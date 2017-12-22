@@ -27,6 +27,7 @@ import org.apache.spark.storage.BlockId
  * `spark.shuffle.memoryFraction` and `spark.storage.memoryFraction` respectively. The two
  * regions are cleanly separated such that neither usage can borrow memory from the other.
  */
+// 	spark 1.6之前的内存管理器，静态内存管理器，这里的静态是指storage、execution内存的占比及界限是固定的。
 private[spark] class StaticMemoryManager(
     conf: SparkConf,
     maxOnHeapExecutionMemory: Long,
@@ -37,6 +38,8 @@ private[spark] class StaticMemoryManager(
     numCores,
     maxOnHeapStorageMemory,
     maxOnHeapExecutionMemory) {
+
+  // StaticMemoryManager分别使用ExecutionMemoryPool、StorageMemoryPool管理execution、storage、unroll内存
 
   def this(conf: SparkConf, numCores: Int) {
     this(
@@ -107,7 +110,15 @@ private[spark] class StaticMemoryManager(
 private[spark] object StaticMemoryManager {
 
   private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
-
+// storage、execution内存占比和界限是固定的
+  /**
+    * storage	0.6	storage-safety	0.6 * 0.9 * (1.0-0.2)
+                      unroll	0.6 * 0.9 * 0.2
+                 storage-reserved	0.6 * 0.1
+      execution	0.2	execution-safety	0.2 * 0.8
+                    execution-reserved	0.2 * 0.2
+        other	0.2
+    */
   /**
    * Return the total amount of memory available for the storage region, in bytes.
    */

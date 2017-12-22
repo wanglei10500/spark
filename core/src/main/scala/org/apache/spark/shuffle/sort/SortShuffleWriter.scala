@@ -24,7 +24,7 @@ import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, S
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.ExternalSorter
-
+// map端支持Partition级别的sort，map task输出会汇总为一个文件
 private[spark] class SortShuffleWriter[K, V, C](
     shuffleBlockResolver: IndexShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
